@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Flip Study Timer</title>
+<style>
+  :root{
+    --bg:#000;
+    --fg:#f4f4f4;
+    --panel:#151515;
+    --panel2:#1c1c1c;
+    --line:#2b2b2b;
+    --muted:#777;
+    --flip-ms:360ms;
+  }
+
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;width:100%;height:100%;background:var(--bg);color:var(--fg);
+    font-family:Arial,Helvetica,sans-serif;overflow:hidden;
+  }
+  body{display:flex;align-items:center;justify-content:center}
+
+  #app{
+    width:100%;height:100%;position:relative;background:#000;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  #timer{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:clamp(12px,2.4vw,38px);
+    padding:2vw;
+    user-select:none;
+  }
+
+  .group{
+    display:flex;
+    gap:clamp(5px,.7vw,12px);
+  }
+
+  .colon{
+    color:#e9e9e9;
+    font-size:clamp(60px,9.2vw,155px);
+    line-height:.68;
+    font-weight:300;
+    margin:0 clamp(-4px,-.25vw,0px);
+    transform:translateY(-1%);
+    text-shadow:0 1px 2px rgba(0,0,0,.7);
+  }
+
+  /* Each numeral is a split-flap tile. The tile itself stays almost black,
+     matching the classic Fliqlo look rather than looking like a white card. */
+  .digit{
+    position:relative;
+    width:clamp(72px,12.8vw,205px);
+    height:clamp(104px,19.2vw,308px);
+    perspective:1200px;
+    font-variant-numeric:tabular-nums;
+    isolation:isolate;
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));
+  }
+
+  .half,.leaf{
+    position:absolute;
+    left:0;
+    width:100%;
+    height:50%;
+    overflow:hidden;
+    background:linear-gradient(to bottom,#151515,#111111);
+    color:var(--fg);
+    backface-visibility:hidden;
+    border:0;
+  }
+
+  .top{
+    top:0;
+    border-radius:3px 3px 0 0;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+  }
+  .bottom{
+    bottom:0;
+    border-radius:0 0 3px 3px;
+    box-shadow:inset 0 -1px 0 rgba(255,255,255,.02);
+  }
+
+  .half span,.leaf span{
+    position:absolute;
+    left:0;
+    width:100%;
+    height:200%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:Arial,Helvetica,sans-serif;
+    font-size:clamp(96px,18.1vw,290px);
+    line-height:1;
+    font-weight:500;
+    letter-spacing:-.075em;
+    text-shadow:0 1px 1px rgba(255,255,255,.08);
+  }
+  .top span{top:0}
+  .bottom span{bottom:0}
+
+  /* Subtle shading gives the split-flap tiles the same depth as the reference. */
+  .top:after,.bottom:after{
+    content:"";
+    position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(to bottom,rgba(255,255,255,.035),rgba(0,0,0,.13));
+  }
+
+  /* During a flip, keep the stationary lower half completely blank.
+     The moving lower flap is still responsible for revealing the new digit. */
+  .digit.flip .bottom span{
+    opacity:0;
+  }
+
+  /* The horizontal hinge is intentionally subtle. */
+  .digit:after{
+    content:"";
+    position:absolute;
+    z-index:30;
+    left:0;top:50%;
+    width:100%;height:2px;
+    background:rgba(0,0,0,.72);
+    box-shadow:0 1px 1px rgba(255,255,255,.035);
+    transform:translateY(-1px);
+    pointer-events:none;
+  }
+
+  .leaf{
+    z-index:20;
+    transform-style:preserve-3d;
+    background:linear-gradient(to bottom,#151515,#101010);
+  }
+  .fold-top{
+    top:0;
+    transform-origin:bottom;
+    border-radius:2px 2px 0 0;
+  }
+  .fold-top span{top:0}
+  .fold-bottom{
+    bottom:0;
+    transform-origin:top;
+    transform:rotateX(90deg);
+    border-radius:0 0 2px 2px;
+  }
+  .fold-bottom span{bottom:0}
+
+  .digit.flip .fold-top{
+    animation:foldTop var(--flip-ms) cubic-bezier(.4,0,1,1) forwards;
+  }
+  .digit.flip .fold-bottom{
+    animation:foldBottom var(--flip-ms) cubic-bezier(0,0,.2,1) var(--flip-ms) forwards;
+  }
+
+  @keyframes foldTop{
+    from{transform:rotateX(0)}
+    to{transform:rotateX(-90deg)}
+  }
+  @keyframes foldBottom{
+    from{transform:rotateX(90deg)}
+    to{transform:rotateX(0)}
+  }
+
+  #controls{
+    position:absolute;
+    left:50%;
+    bottom:30px;
+    transform:translateX(-50%);
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    gap:26px;
+    padding:0;
+    background:transparent;
+    border:0;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s ease;
+    z-index:100;
+  }
+
+  #app.show-controls #controls{
+    opacity:1;
+    pointer-events:auto;
+  }
+
+  .control-btn{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:7px;
+    width:70px;
+    height:72px;
+    padding:0;
+    border:0;
+    background:transparent;
+    color:#eee;
+    border-radius:0;
+    box-shadow:none;
+    font:inherit;
+    cursor:pointer;
+  }
+
+  .control-icon{
+    width:48px;
+    height:48px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:50%;
+    background:#171717;
+    border:1px solid #202020;
+    color:#f1f1f1;
+    box-shadow:0 2px 10px rgba(0,0,0,.35);
+    transition:background .15s ease,transform .15s ease;
+  }
+
+  .control-btn:hover .control-icon{background:#252525}
+  .control-btn:active .control-icon{transform:scale(.94)}
+
+  .control-label{
+    color:#eee;
+    font-size:12px;
+    line-height:1;
+    font-weight:600;
+    white-space:nowrap;
+  }
+
+  .edit-icon{font-size:20px}
+  .start-icon{font-size:15px;padding-left:2px}
+  .reset-icon{font-size:23px;font-weight:300}
+
+  #start.running .start-icon{font-size:0}
+  #start.running .start-icon::before{
+    content:"■";
+    font-size:14px;
+  }
+
+  .fullscreen-btn{
+    position:absolute;
+    right:20px;
+    top:18px;
+    width:44px;
+    height:44px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0;
+    border:0;
+    border-radius:50%;
+    background:#171717;
+    color:#eee;
+    font-size:21px;
+    line-height:1;
+    cursor:pointer;
+    box-shadow:0 2px 10px rgba(0,0,0,.35);
+    z-index:120;
+  }
+
+  .fullscreen-btn:hover{background:#252525}
+
+  #settings{
+    position:absolute;
+    left:50%;top:50%;
+    transform:translate(-50%,-50%);
+    width:min(430px,calc(100vw - 30px));
+    background:rgba(22,22,22,.98);
+    border:1px solid #343434;
+    border-radius:16px;
+    padding:22px;
+    z-index:200;
+    box-shadow:0 24px 80px rgba(0,0,0,.8);
+    display:none;
+  }
+  #settings.open{display:block}
+  #settings h2{margin:0 0 16px;font-size:20px}
+  .fields{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  label{color:var(--muted);font-size:12px;display:block;margin-bottom:6px}
+  input{
+    width:100%;border:1px solid #3a3a3a;border-radius:8px;
+    background:#0d0d0d;color:#fff;padding:11px;font-size:17px;outline:none;
+  }
+  input:focus{border-color:#777}
+  .presets{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0 18px}
+  .presets button{font-size:13px;padding:8px 10px}
+  .actions{display:flex;justify-content:flex-end;gap:8px}
+
+  #hint{
+    position:absolute;top:17px;left:50%;
+    transform:translateX(-50%);
+    color:#4e4e4e;font-size:12px;
+    opacity:0;transition:opacity .3s;
+    z-index:50;white-space:nowrap;
+  }
+  #app.show-controls #hint{opacity:1}
+
+  #done{
+    position:absolute;inset:0;
+    display:none;align-items:center;justify-content:center;
+    flex-direction:column;background:#000;z-index:150;
+  }
+  #done.open{display:flex}
+  #done .title{font-size:clamp(28px,5vw,64px);font-weight:500}
+  #done .sub{color:#777;margin-top:12px}
+
+  #done .stop-alarm{
+    margin-top:24px;
+    width:auto;
+    min-width:130px;
+    height:44px;
+    padding:0 20px;
+    border:1px solid #444;
+    border-radius:22px;
+    background:#181818;
+    color:#fff;
+    font:600 13px Arial,Helvetica,sans-serif;
+    cursor:pointer;
+  }
+
+  #done .stop-alarm:hover{background:#292929}
+
+  @media(max-width:700px){
+    #timer{gap:5px;padding:3vw}
+    .colon{font-size:clamp(38px,10vw,80px)}
+    .digit{width:clamp(38px,13vw,82px);height:clamp(55px,19vw,120px)}
+    .half span,.leaf span{font-size:clamp(54px,18vw,125px)}
+    .group{gap:3px}
+    #controls{bottom:24px;gap:8px}
+    .control-btn{width:62px}
+    .control-icon{width:44px;height:44px}
+    .control-label{font-size:11px}
+    .fullscreen-btn{right:12px;top:12px;width:42px;height:42px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hint">Tap the screen or press Space for controls</div>
+
+  <main id="timer" aria-label="Countdown timer"></main>
+
+  <div id="controls">
+    <button id="edit" class="control-btn">
+      <span class="control-icon edit-icon">✎</span>
+      <span class="control-label">Set</span>
+    </button>
+    <button id="start" class="control-btn primary">
+      <span class="control-icon start-icon">▶</span>
+      <span class="control-label">Start</span>
+    </button>
+    <button id="reset" class="control-btn">
+      <span class="control-icon reset-icon">↻</span>
+      <span class="control-label">Reset</span>
+    </button>
+  </div>
+
+  <button id="fullscreen" class="fullscreen-btn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
+
+  <section id="settings" aria-modal="true">
+    <h2>Set timer</h2>
+    <div class="fields">
+      <div><label for="hours">Hours</label><input id="hours" type="number" min="0" max="999" value="0"></div>
+      <div><label for="minutes">Minutes</label><input id="minutes" type="number" min="0" max="59" value="50"></div>
+      <div><label for="seconds">Seconds</label><input id="seconds" type="number" min="0" max="59" value="0"></div>
+    </div>
+    <div class="presets">
+      <button data-min="25">25 min</button>
+      <button data-min="45">45 min</button>
+      <button data-min="50">50 min</button>
+      <button data-min="60">1 hour</button>
+      <button data-min="90">90 min</button>
+      <button data-min="120">2 hours</button>
+    </div>
+    <div class="actions">
+      <button id="cancel">Cancel</button>
+      <button id="apply" class="primary">Apply & Start</button>
+    </div>
+  </section>
+
+  <section id="done">
+    <div class="title">Time's up</div>
+    <div class="sub">Alarm is sounding</div>
+    <button id="stopAlarm" class="stop-alarm">Stop alarm</button>
+  </section>
+</div>
+
+<script>
+(() => {
+  const app = document.querySelector('#app');
+  const timerEl = document.querySelector('#timer');
+  const startBtn = document.querySelector('#start');
+  const resetBtn = document.querySelector('#reset');
+  const editBtn = document.querySelector('#edit');
+  const fsBtn = document.querySelector('#fullscreen');
+  const settings = document.querySelector('#settings');
+  const done = document.querySelector('#done');
+  const hInput = document.querySelector('#hours');
+  const mInput = document.querySelector('#minutes');
+  const sInput = document.querySelector('#seconds');
+
+  let duration = 50 * 60;
+  let remaining = duration;
+  let running = false;
+  let endAt = 0;
+  let tick = null;
+  let lastText = '';
+  let audioCtx = null;
+  let wakeLock = null;
+  let alarmTimer = null;
+  let alarmOscillators = [];
+
+  function pad(n) { return String(n).padStart(2,'0'); }
+
+  function parts(total) {
+    total = Math.max(0, Math.floor(total));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return { h, m, s };
+  }
+
+  function makeDigit(value) {
+    const d = document.createElement('div');
+    d.className = 'digit';
+    const top = document.createElement('div'); top.className='half top';
+    const bottom = document.createElement('div'); bottom.className='half bottom';
+    const ft = document.createElement('div'); ft.className='leaf fold-top';
+    const fb = document.createElement('div'); fb.className='leaf fold-bottom';
+    for (const el of [top,bottom,ft,fb]) {
+      const span = document.createElement('span'); span.textContent=value; el.appendChild(span);
+    }
+    d.append(top,bottom,ft,fb);
+    return d;
+  }
+
+  function build() {
+    timerEl.innerHTML = '';
+    const p = parts(remaining);
+    const groups = [];
+    groups.push(['h', pad(p.h)]);
+    groups.push(['m', pad(p.m)]);
+    groups.push(['s', pad(p.s)]);
+    groups.forEach((g, gi) => {
+      const group = document.createElement('div'); group.className='group'; group.dataset.unit=g[0];
+      [...g[1]].forEach(ch => group.appendChild(makeDigit(ch)));
+      timerEl.appendChild(group);
+      if (gi < groups.length-1) {
+        const c=document.createElement('div'); c.className='colon'; c.textContent=':'; timerEl.appendChild(c);
+      }
+    });
+    lastText = displayString();
+  }
+
+  function displayString() {
+    const p=parts(remaining);
+    return pad(p.h)+':'+pad(p.m)+':'+pad(p.s);
+  }
+
+  function setDigits(newText, animate=true) {
+    const chars = [...newText].filter(c => c !== ':');
+    const digits = [...timerEl.querySelectorAll('.digit')];
+    let i = 0;
+
+    for (const d of digits) {
+      const next = chars[i++] ?? '0';
+      const top = d.querySelector('.top span');
+      const bottom = d.querySelector('.bottom span');
+      const foldTop = d.querySelector('.fold-top span');
+      const foldBottom = d.querySelector('.fold-bottom span');
+
+      const current = top.textContent;
+
+      // Nothing changed.
+      if (current === next) {
+        // Keep every visible/static layer synchronized.
+        bottom.textContent = next;
+        foldTop.textContent = next;
+        foldBottom.textContent = next;
+        continue;
+      }
+
+      // Keep the TOP static face on the new value, but leave the BOTTOM
+      // static face hidden for the entire flip. This prevents the new
+      // number from appearing underneath the animation.
+      top.textContent = next;
+      bottom.textContent = next;
+
+      if (!animate) {
+        foldTop.textContent = next;
+        foldBottom.textContent = next;
+        d.classList.remove('flip');
+        continue;
+      }
+
+      // Top flap: old -> folds away.
+      // Bottom flap: new -> unfolds into the lower half.
+      foldTop.textContent = current;
+      foldBottom.textContent = next;
+
+      d.classList.remove('flip');
+      void d.offsetWidth;
+      d.classList.add('flip');
+
+      setTimeout(() => {
+        foldTop.textContent = next;
+        foldBottom.textContent = next;
+        d.classList.remove('flip');
+        bottom.textContent = next;
+      }, 760);
+    }
+
+    lastText = newText;
+  }
+
+  function render(animate=true) {
+    const text=displayString();
+    if (text.length !== lastText.length) { build(); return; }
+    setDigits(text, animate);
+  }
+
+  
+  async function keepScreenAwake(){
+    try{
+      if('wakeLock' in navigator && !wakeLock){
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release',()=>{ wakeLock=null; });
+      }
+    }catch{}
+  }
+
+  function releaseScreenWakeLock(){
+    try{ if(wakeLock){ wakeLock.release(); wakeLock=null; } }catch{}
+  }
+
+  function initAudio(){
+    try{
+      if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+    }catch{}
+  }
+
+  function beep(time, frequency, duration, volume){
+    if(!audioCtx) return;
+    const osc=audioCtx.createOscillator();
+    const gain=audioCtx.createGain();
+    osc.type='square';
+    osc.frequency.setValueAtTime(frequency,time);
+    gain.gain.setValueAtTime(0.0001,time);
+    gain.gain.exponentialRampToValueAtTime(volume,time+0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001,time+duration);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(time);
+    osc.stop(time+duration+0.03);
+    alarmOscillators.push(osc);
+  }
+
+  function stopAlarm(){
+    clearTimeout(alarmTimer);
+    alarmTimer=null;
+    for(const osc of alarmOscillators){
+      try{ osc.stop(); }catch{}
+    }
+    alarmOscillators=[];
+  }
+
+  function alarm(){
+    initAudio();
+    if(!audioCtx) return;
+
+    stopAlarm();
+
+    const startTime=audioCtx.currentTime+0.05;
+    const pattern=[880,660,880,988,784,988];
+    const beatLength=.55;
+
+    // Roughly 11 seconds of loud repeating alarm.
+    for(let i=0;i<20;i++){
+      beep(startTime+i*beatLength,pattern[i%pattern.length],.30,.42);
+    }
+
+    alarmTimer=setTimeout(()=>{
+      alarmOscillators=[];
+      alarmTimer=null;
+    },11200);
+  }
+
+function start() {
+    if (duration <= 0) return openSettings();
+    initAudio();
+    keepScreenAwake();
+    if (remaining <= 0) remaining=duration;
+    running=true;
+    endAt=Date.now()+remaining*1000;
+    startBtn.classList.add('running');
+    startBtn.querySelector('.control-label').textContent='Stop';
+    startBtn.classList.remove('primary');
+    clearInterval(tick);
+    tick=setInterval(() => {
+      const nextRemaining = Math.max(0, Math.ceil((endAt-Date.now())/1000));
+
+      if (nextRemaining !== remaining) {
+        remaining = nextRemaining;
+        render(true);
+      }
+
+      if (remaining <= 0) finish();
+    }, 100);
+    app.classList.remove('show-controls');
+  }
+
+  function pause() {
+    running=false;
+    clearInterval(tick);
+    releaseScreenWakeLock();
+    startBtn.classList.remove('running');
+    startBtn.querySelector('.control-label').textContent='Start';
+    startBtn.classList.add('primary');
+  }
+
+  function finish() {
+    pause();
+    remaining=0; render(true);
+    alarm();
+    done.classList.add('open');
+  }
+
+  function reset() {
+    pause();
+    stopAlarm();
+    done.classList.remove('open');
+    remaining=duration;
+    render(false);
+  }
+
+  function openSettings() {
+    stopAlarm();
+    pause();
+    hInput.value=Math.floor(duration/3600);
+    mInput.value=Math.floor((duration%3600)/60);
+    sInput.value=duration%60;
+    settings.classList.add('open');
+  }
+
+  function apply() {
+    const h=Math.max(0, Number(hInput.value)||0);
+    const m=Math.max(0, Math.min(59, Number(mInput.value)||0));
+    const s=Math.max(0, Math.min(59, Number(sInput.value)||0));
+    duration=h*3600+m*60+s;
+    remaining=duration;
+    done.classList.remove('open');
+    settings.classList.remove('open');
+    build();
+    if (duration>0) start();
+  }
+
+  startBtn.onclick=()=>running?pause():start();
+  resetBtn.onclick=reset;
+  editBtn.onclick=openSettings;
+  document.querySelector('#cancel').onclick=()=>settings.classList.remove('open');
+  document.querySelector('#apply').onclick=apply;
+  document.querySelector('#stopAlarm').onclick=()=>{
+    stopAlarm();
+    done.classList.remove('open');
+    openSettings();
+  };
+
+  document.querySelectorAll('[data-min]').forEach(b => b.onclick=()=>{
+    const mins=Number(b.dataset.min);
+    hInput.value=Math.floor(mins/60); mInput.value=mins%60; sInput.value=0;
+  });
+
+  fsBtn.onclick=async()=>{
+    try {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch {}
+  };
+
+  app.addEventListener('click', e => {
+    if (settings.contains(e.target) || document.querySelector('#controls').contains(e.target)) return;
+    if (done.classList.contains('open')) { stopAlarm(); done.classList.remove('open'); openSettings(); return; }
+    app.classList.toggle('show-controls');
+    if (app.classList.contains('show-controls')) setTimeout(()=>app.classList.remove('show-controls'),4000);
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.code==='Space' && !settings.classList.contains('open')) {
+      e.preventDefault(); running?pause():start();
+    } else if (e.key.toLowerCase()==='r') reset();
+    else if (e.key.toLowerCase()==='f') fsBtn.click();
+    else if (e.key.toLowerCase()==='s') openSettings();
+    else if (e.key==='Escape') { settings.classList.remove('open'); stopAlarm(); done.classList.remove('open'); }
+  });
+
+  build();
+})();
+</script>
+</body>
+</html>
